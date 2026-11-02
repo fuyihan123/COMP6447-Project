@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+echo "elevate: scaffold only; privilege escalation is not implemented" >&2
+exit 2

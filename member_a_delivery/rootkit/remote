@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: ./remote <TARGET IP>" >&2
+    exit 2
+fi
+
+echo "remote: optional feature is not implemented" >&2
+exit 2

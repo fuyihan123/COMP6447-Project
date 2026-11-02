@@ -1,0 +1,40 @@
+# Large VM and installation artefacts
+*.iso
+*.qcow2
+*.img
+*.xz
+*.txz
+*.raw
+
+# Generated archives and VM test packages
+*.tar
+vm-test/
+vm-clean-test/
+_readcopy/
+_readcopy2/
+
+# FreeBSD/WSL build outputs
+*.ko
+*.o
+*.obj
+*.core
+obj/
+machine/
+x86/
+i386/
+
+# Local caches and credentials
+.freebsd-cache/
+.ssh/
+id_ed25519
+id_ed25519.pub
+
+# Python and editor files
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+
+# Course documents are retained locally but not required in the code repo
+# Uncomment the following if the group decides to keep only Markdown/source:
+# *.docx

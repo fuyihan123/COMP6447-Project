@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: ./install <REMOTE IP>" >&2
+    exit 2
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "install: must run as root" >&2
+    exit 1
+fi
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+echo "install: building benign baseline kernel module"
+make -C "$SCRIPT_DIR/module" clean >/dev/null 2>&1 || true
+make -C "$SCRIPT_DIR/module"
+kldunload rootkit_lab_baseline >/dev/null 2>&1 || true
+kldload "$SCRIPT_DIR/module/rootkit_lab_baseline.ko"
+echo "install: baseline module loaded"

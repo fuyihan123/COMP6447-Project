@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "detect: must run as root" >&2
+    exit 2
+fi
+
+# Baseline-only detector. It checks the exact module name used by the
+# harmless validation module. This is intentionally not a final detector.
+if kldstat -q -n rootkit_lab_baseline; then
+    echo "detect: baseline module detected" >&2
+    exit 1
+fi
+
+echo "detect: no baseline module detected" >&2
+exit 0

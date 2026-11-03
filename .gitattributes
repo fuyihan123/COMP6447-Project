@@ -1,0 +1,10 @@
+# Shell scripts and kernel sources must keep LF even on Windows checkouts;
+# a CRLF shebang makes ./install fail inside the FreeBSD VM.
+* text=auto eol=lf
+
+*.docx binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.exe binary
+*.iso binary

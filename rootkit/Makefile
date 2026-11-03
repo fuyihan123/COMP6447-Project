@@ -1,5 +1,4 @@
-all:
-	@echo "No kernel module is defined yet; use the FreeBSD 14.5 environment before adding one."
+KMOD=	rootkit_lab
+SRCS=	rootkit.c
 
-clean:
-	@echo "Nothing to clean."
+.include <bsd.kmod.mk>

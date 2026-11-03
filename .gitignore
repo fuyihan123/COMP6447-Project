@@ -35,6 +35,16 @@ __pycache__/
 .vscode/
 .idea/
 
+# Superseded environment / handoff notes, removed from the working tree
+member_a_delivery/
+BUILD_NOTES.md
+ENVIRONMENT_SETUP.md
+ENVIRONMENT_STATUS.md
+MEMBER_A_HANDOFF.md
+WORKPLAN.md
+DESIGN_DECISION.md
+meeting_prep.md
+
 # Course documents are retained locally but not required in the code repo
 # Uncomment the following if the group decides to keep only Markdown/source:
 # *.docx

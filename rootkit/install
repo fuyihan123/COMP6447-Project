@@ -2,20 +2,31 @@
 set -eu
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: ./install <REMOTE IP>" >&2
-    exit 2
+	echo "usage: ./install <REMOTE IP>" >&2
+	exit 2
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "install: must run as root" >&2
-    exit 1
+	echo "install: must run as root" >&2
+	exit 1
 fi
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+MODDIR=/boot/modules
+KO="$MODDIR/rootkit_lab.ko"
 
-echo "install: building benign baseline kernel module"
-make -C "$SCRIPT_DIR/module" clean >/dev/null 2>&1 || true
-make -C "$SCRIPT_DIR/module"
-kldunload rootkit_lab_baseline >/dev/null 2>&1 || true
-kldload "$SCRIPT_DIR/module/rootkit_lab_baseline.ko"
-echo "install: baseline module loaded"
+echo "install: building kernel module"
+make -C "$SCRIPT_DIR" clean >/dev/null 2>&1 || true
+make -C "$SCRIPT_DIR"
+
+echo "install: installing $KO"
+mkdir -p "$MODDIR"
+cp "$SCRIPT_DIR/rootkit_lab.ko" "$KO"
+
+if ! grep -q '^rootkit_lab_load=' /boot/loader.conf 2>/dev/null; then
+	echo 'rootkit_lab_load="YES"' >> /boot/loader.conf
+fi
+
+kldunload rootkit_lab >/dev/null 2>&1 || true
+kldload "$KO"
+echo "install: rootkit loaded"

@@ -25,7 +25,14 @@ HOST_IP="10.0.2.2"
 ACCEL=(-cpu max)
 [[ -w /dev/kvm ]] && ACCEL=(-enable-kvm -cpu host)
 
-cleanup() { kill "${QEMU_PID:-}" 2>/dev/null || true; rm -f "$OVERLAY"; }
+cleanup() {
+    if [[ -n "${QEMU_PID:-}" ]]; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+        QEMU_PID=""
+    fi
+    rm -f "$OVERLAY"
+}
 trap cleanup EXIT
 
 # 1. Download & Provision Cached Base Image (Runs Once)
@@ -159,4 +166,14 @@ ssh -t "${SSH_OPTS[@]}" -o IdentitiesOnly=yes -o PubkeyAuthentication=yes -p "$P
 echo ""
 echo "[*] Shutting down VM and removing temporary overlay..."
 ssh "${SSH_OPTS[@]}" -p "$PORT" root@127.0.0.1 "poweroff" 2>/dev/null || true
+for attempt in {1..15}; do
+    kill -0 "$QEMU_PID" 2>/dev/null || break
+    sleep 1
+done
+if kill -0 "$QEMU_PID" 2>/dev/null; then
+    echo "[*] Guest did not stop in time; terminating QEMU..."
+    kill "$QEMU_PID" 2>/dev/null || true
+fi
 wait "$QEMU_PID" 2>/dev/null || true
+QEMU_PID=""
+rm -f "$OVERLAY"

